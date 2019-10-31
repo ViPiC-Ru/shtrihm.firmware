@@ -1,4 +1,4 @@
-/* 0.1.0 обновление прошивки касс
+/* 0.1.1 обновление прошивки касс
 
 cscript firmware.min.js <image>
 
@@ -7,8 +7,9 @@ cscript firmware.min.js <image>
 */
 
 (function(wsh, undefined){// замыкаем что бы не сорить глобалы
-	var value, fso, image, driver, table, now, speed,
-		timeout = 15 * 1000, password = 30, error = 0;
+	var value, fso, image, driver, table, now, speed, 
+		isUpdated = false, timeout = 15 * 1000,
+		password = 30, error = 0;
 	
 	fso = new ActiveXObject('Scripting.FileSystemObject'); 
 	// получаем путь к файлу прошивки
@@ -31,6 +32,7 @@ cscript firmware.min.js <image>
 			driver = new ActiveXObject('Addin.DrvFR');
 		}catch(e){error = 2;};
 	};
+	// проверяем закрытие смены
 	if(!error){// если нету ошибок
 		speed = driver.BaudRate;
 		driver.Password = password;
@@ -40,22 +42,6 @@ cscript firmware.min.js <image>
 			if(4 == value){// если смена закрыта
 			}else error = 3;
 		}else error = 3;
-	};
-	// проверяем наличее карты памяти
-	if(!error){// если нету ошибок
-		driver.TableNumber = 14;// Sdcard status
-		driver.RowNumber = 1;// First
-		driver.FieldNumber = 1;// Status
-		driver.GetFieldStruct();// запрашиваем структуру
-		if(!driver.ResultCode){// если данные получены
-			driver.ReadTable();// запрашиваем данные
-			if(!driver.ResultCode){// если данные получены
-				if(driver.FieldType) value = driver.ValueOfFieldString;
-				else value = driver.ValueOfFieldInteger;
-				if(0 == value){// если нет проблем с картой памяти
-				}else error = 4;
-			}else error = 4;
-		}else error = 4;
 	};
 	// сохраняем все значения таблицы
 	if(!error){// если нету ошибок
@@ -98,10 +84,46 @@ cscript firmware.min.js <image>
 			};
 		};
 		if(93 == driver.ResultCode){// если данные получены
+		}else error = 4;
+	};
+	// обновляем прошивку через com
+	if(!error && !isUpdated){// если нужно выполнить
+		driver.UpdateFirmwareMethod = 1;// XMODEM
+		driver.FileName = image;
+		driver.UpdateFirmware();
+		if(!driver.ResultCode){// если запрос выполнен
+			while(1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
+			if(!driver.UpdateFirmwareStatus) isUpdated = true; 
 		}else error = 5;
 	};
+	// обновляем прошивку через usb
+	if(!error && !isUpdated){// если нужно выполнить
+		driver.UpdateFirmwareMethod = 0;// DFU
+		driver.FileName = image;
+		driver.UpdateFirmware();
+		if(!driver.ResultCode){// если запрос выполнен
+			while(1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
+			if(!driver.UpdateFirmwareStatus) isUpdated = true;
+		}else error = 6;
+	};
+	// проверяем наличее карты памяти
+	if(!error && !isUpdated){// если нужно выполнить
+		driver.TableNumber = 14;// Sdcard status
+		driver.RowNumber = 1;// First
+		driver.FieldNumber = 1;// Status
+		driver.GetFieldStruct();// запрашиваем структуру
+		if(!driver.ResultCode){// если данные получены
+			driver.ReadTable();// запрашиваем данные
+			if(!driver.ResultCode){// если данные получены
+				if(driver.FieldType) value = driver.ValueOfFieldString;
+				else value = driver.ValueOfFieldInteger;
+				if(0 == value){// если нет проблем с картой памяти
+				}else error = 7;
+			}else error = 7;
+		}else error = 7;
+	};
 	// отключаем онлайн обновление
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		value = 0;// Работать с сервером скок
 		driver.TableNumber = 23;// Aдминистрирование
 		driver.RowNumber = 1;// First
@@ -112,22 +134,22 @@ cscript firmware.min.js <image>
 			else driver.ValueOfFieldInteger = value;
 			driver.WriteTable();// изменяем данные
 			if(!driver.ResultCode){// если данные получены
-			}else error = 6;
-		}else error = 6;
+			}else error = 8;
+		}else error = 8;
 	};
 	// загружаем прошивку на карту память
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		driver.FileType = 1;// прошивка
 		driver.FileName = image;
 		driver.LoadFileOnSDCard();
 		if(!driver.ResultCode){// если данные получены
-		}else error = 7;
+		}else error = 9;
 	};
 	// перезагружаем кассу
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		driver.RebootKKT();
 		if(!driver.ResultCode){// если данные получены
-		}else error = 8;
+		}else error = 10;
 	};
 	// дожидаемся связи с ккм
 	if(!error){// если нету ошибок
@@ -145,22 +167,22 @@ cscript firmware.min.js <image>
 			driver.WaitConnection();
 		};
 		if(!driver.ResultCode){// если данные получены
-		}else error = 9;
+		}else error = 11;
 	};
 	// проверяем режим работы
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		driver.GetECRStatus();
 		if(!driver.ResultCode){// если запрос выполнен
 			value = driver.ECRMode;
 			if(9 == value){// если режим обнуления
-			}else error = 10;
-		}else error = 10;
+			}else error = 12;
+		}else error = 12;
 	};
 	// выполняем технологическое обнуление
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		driver.ResetSettings();
 		if(!driver.ResultCode){// если запрос выполнен
-		}else error = 11;
+		}else error = 13;
 	};
 	// устанавливаем время с компьютера
 	if(!error){// если нету ошибок
@@ -173,7 +195,7 @@ cscript firmware.min.js <image>
 		driver.Time = value;
 		driver.SetTime();
 		if(!driver.ResultCode){// если запрос выполнен
-		}else error = 12;
+		}else error = 14;
 	};
 	// устанавливаем дату с компьютера
 	if(!error){// если нету ошибок
@@ -187,14 +209,15 @@ cscript firmware.min.js <image>
 		if(!driver.ResultCode){// если запрос выполнен
 			driver.ConfirmDate();
 			if(!driver.ResultCode){// если запрос выполнен
-			}else error = 13;
-		}else error = 13;
+			}else error = 15;
+		}else error = 15;
 	};
 	// инициализируем таблицу
-	if(!error){// если нету ошибок
+	if(!error && !isUpdated){// если нужно выполнить
 		driver.InitTable();
 		if(!driver.ResultCode){// если запрос выполнен
-		}else error = 14;
+			isUpdated = true;
+		}else error = 16;
 	};
 	// восстанавливаем значения таблиц
 	if(!error){// если нету ошибок
@@ -224,15 +247,15 @@ cscript firmware.min.js <image>
 				driver.BaudRate = speed;
 				driver.SetExchangeParam();
 				if(!driver.ResultCode){// если запрос выполнен
-				}else error = 15;
+				}else error = 17;
 			};
-		}else error = 15;
+		}else error = 17;
 	};
 	// перезагружаем кассу
 	if(!error){// если нету ошибок
 		driver.RebootKKT();
 		if(!driver.ResultCode){// если данные получены
-		}else error = 16;
+		}else error = 18;
 	};
 	// завершаем сценарий кодом
 	wsh.quit(error);
