@@ -1,4 +1,4 @@
-/* 0.1.2 обновление прошивки касс
+/* 0.1.3 обновление прошивки касс
 
 cscript firmware.min.js <image> [<build>]
 
@@ -79,17 +79,6 @@ cscript firmware.min.js <image> [<build>]
 							if(!driver.FieldType || 1 != driver.MAXValueOfField){
 								if(driver.FieldType) value = driver.ValueOfFieldString;
 								else value = driver.ValueOfFieldInteger;
-								// вносим свои корректировки
-								if(17 == i && 1 == j &&  3 == k) value = 2;// режим исчисления скидок
-								if(17 == i && 1 == j && 10 == k) value = 1;// печать параметров офд в чеках
-								if(17 == i && 1 == j && 11 == k) value = 7;// проверять кс инн
-								if(17 == i && 1 == j && 12 == k) value = 7;// печать реквизитов пользователя
-								if(17 == i && 1 == j && 17 == k) value = 2;// формат фд
-								if(17 == i && 1 == j && 39 == k) value = 1;// новые заголовки реквизитов
-								if(23 == i && 1 == j &&  1 == k) value = 1;// работать с сервером ско
-								if(23 == i && 1 == j &&  5 == k) value = 1;// разрешить автообновление
-								if(23 == i && 1 == j &&  6 == k) value = 1;// однократное обновление
-								// запоминаем значение
 								table[i][j][k] = value;
 							};
 						};
