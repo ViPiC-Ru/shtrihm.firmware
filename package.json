@@ -1,0 +1,8 @@
+{
+    "name": "shtrihm-firmware",
+    "version": "1.0.0",
+    "description": "Обновление прошивки касс",
+    "main": "firmware.js",
+    "author": "ViPiC",
+    "license": "GPL-3.0"
+}

@@ -1,296 +1,295 @@
-/* 0.1.5 обновление прошивки касс
+/* 1.0.0 РѕР±РЅРѕРІР»РµРЅРёРµ РїСЂРѕС€РёРІРєРё РєР°СЃСЃ
 
 cscript firmware.min.js <image> [<build> [<model>]]
 
-<image>		- путь к файлу с прошивкой.
-<build>		- номер сборки прошивки в файле.
-<model>		- фильтр по названию модели кассы.
+<image>     - РџСѓС‚СЊ Рє С„Р°Р№Р»Сѓ СЃ РїСЂРѕС€РёРІРєРѕР№.
+<build>     - РќРѕРјРµСЂ СЃР±РѕСЂРєРё РїСЂРѕС€РёРІРєРё РІ С„Р°Р№Р»Рµ.
+<model>     - Р¤РёР»СЊС‚СЂ РїРѕ РЅР°Р·РІР°РЅРёСЋ РјРѕРґРµР»Рё РєР°СЃСЃС‹.
 
 */
 
-(function(wsh, undefined){// замыкаем что бы не сорить глобалы
-	var value, fso, image, build, model, driver, table, now,
-		speed, isUpdated = false, timeout = 15 * 1000,
-		password = 30, error = 0;
-	
-	fso = new ActiveXObject('Scripting.FileSystemObject'); 
-	// получаем путь к файлу прошивки
-	if(!error){// если нету ошибок
-		if(0 < wsh.arguments.length){// если передан параметр
-			value = wsh.arguments(0);
-			if(value){// если задано
-				image = fso.getAbsolutePathName(value);
-			};
-		};
-	};
-	// получаем номер сборки прошивки
-	if(!error){// если нету ошибок
-		if(1 < wsh.arguments.length){// если передан параметр
-			value = wsh.arguments(1);
-			if(value){// если задано
-				build = value;
-			};
-		};
-	};
-	// получаем название модели кассы
-	if(!error){// если нету ошибок
-		if(2 < wsh.arguments.length){// если передан параметр
-			value = wsh.arguments(2);
-			if(value){// если задано
-				model = value.toLowerCase();
-			};
-		};
-	};
-	// проверяем наличее файла прошивки
-	if(!error && image){// если нужно выполнить
-		if(fso.fileExists(image)){// если файл существует
-		}else error = 1;
-	};
-	// создаём объект для взаимодейсивия с кассой
-	if(!error){// если нету ошибок
-		try{// пробуем подключиться к кассе
-			driver = new ActiveXObject('Addin.DrvFR');
-			speed = driver.BaudRate;
-			driver.Password = password;
-			driver.GetECRStatus();
-			if(!driver.ResultCode){// если запрос выполнен
-			}else error = 2;
-		}catch(e){error = 2;};
-	};
-	// проверяем версию прошивки
-	if(!error && build){// если нужно выполнить
-		value = driver.ECRBuild;
-		if(build != value){// если другая прошивка
-		}else error = 3;
-	};
+(function (wsh, undefined) {// Р·Р°РјС‹РєР°РµРј С‡С‚Рѕ Р±С‹ РЅРµ СЃРѕСЂРёС‚СЊ РіР»РѕР±Р°Р»С‹
+    var value, fso, image, build, model, driver, table, now,
+        speed, isUpdated = false, timeout = 15 * 1000,
+        password = 30, error = 0;
 
-	// проверяем название модели кассы
-	if(!error && model){// если нужно выполнить
-		value = driver.UDescription.toLowerCase();
-		if(~value.indexOf(model)){// если модель подходит
-		}else error = 4;
-	};
-	// проверяем состояние смены
-	if(!error){// если нету ошибок
-		if(4 == driver.ECRMode){// если смена закрыта
-		}else error = 5;
-	};
-	// сохраняем все значения таблицы
-	if(!error){// если нету ошибок
-		table = {};// сбрасываем значения таблицы
-		// работаем с номером таблицы
-		for(var i = 1; !driver.ResultCode; i++){
-			driver.TableNumber = i;
-			driver.GetTableStruct();
-			// работаем с рядами и полями в них
-			table[i] = {};// сбрасываем таблицу
-			for(var j = 1, jLen = driver.RowNumber; !driver.ResultCode && j <= jLen; j++){
-				table[i][j] = {};// сбрасываем ряд
-				for(var k = 1, kLen = driver.FieldNumber; !driver.ResultCode && k <= kLen; k++){
-					driver.TableNumber = i;// таблица
-					driver.RowNumber = j;// ряд
-					driver.FieldNumber = k;// поле
-					driver.GetFieldStruct();
-					if(!driver.ResultCode){// если данные получены
-						driver.ReadTable();// получаем данные
-						if(!driver.ResultCode){// если данные получены
-							if(!driver.FieldType || 1 != driver.MAXValueOfField){
-								if(driver.FieldType) value = driver.ValueOfFieldString;
-								else value = driver.ValueOfFieldInteger;
-								table[i][j][k] = value;
-							};
-						};
-					};
-				};
-			};
-		};
-		if(93 == driver.ResultCode){// если данные получены
-		}else error = 6;
-	};
-	// обновляем прошивку через usb
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.UpdateFirmwareMethod = 0;// DFU
-		driver.FileName = image;
-		driver.UpdateFirmware();
-		if(!driver.ResultCode){// если запрос выполнен
-			while(1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
-			if(!driver.UpdateFirmwareStatus) isUpdated = true;
-		};
-	};
-	// дожидаемся связи с ккм
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.Password = password;
-		driver.ConnectionTimeout = timeout;
-		// ожидаем доступность порта
-		driver.WaitConnection();
-		for(var i = 0, iLen = 5; driver.ResultCode && i < iLen; i++){
-			driver.WaitConnection();
-			wsh.sleep(timeout);
-		};
-		if(!driver.ResultCode){// если данные получены
-		}else error = 7;
-	};
-	// обновляем прошивку через com
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.UpdateFirmwareMethod = 1;// XMODEM
-		driver.FileName = image;
-		driver.UpdateFirmware();
-		if(!driver.ResultCode){// если запрос выполнен
-			while(1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
-			if(!driver.UpdateFirmwareStatus) isUpdated = true; 
-		}else error = 8;
-	};
-	// проверяем наличее карты памяти
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.TableNumber = 14;// Sdcard status
-		driver.RowNumber = 1;// First
-		driver.FieldNumber = 1;// Status
-		driver.GetFieldStruct();// запрашиваем структуру
-		if(!driver.ResultCode){// если данные получены
-			driver.ReadTable();// запрашиваем данные
-			if(!driver.ResultCode){// если данные получены
-				if(driver.FieldType) value = driver.ValueOfFieldString;
-				else value = driver.ValueOfFieldInteger;
-				if(0 == value){// если нет проблем с картой памяти
-				}else error = 9;
-			}else error = 9;
-		}else error = 9;
-	};
-	// отключаем онлайн обновление
-	if(!error && !isUpdated){// если нужно выполнить
-		value = 0;// Работать с сервером скок
-		driver.TableNumber = 23;// Aдминистрирование
-		driver.RowNumber = 1;// First
-		driver.FieldNumber = 1;// Работать с сервером скок
-		driver.GetFieldStruct();// запрашиваем структуру
-		if(!driver.ResultCode){// если данные получены
-			if(driver.FieldType) driver.ValueOfFieldString = value;
-			else driver.ValueOfFieldInteger = value;
-			driver.WriteTable();// изменяем данные
-			if(!driver.ResultCode){// если данные получены
-			}else error = 10;
-		}else error = 10;
-	};
-	// загружаем прошивку на карту память
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.FileType = 1;// прошивка
-		driver.FileName = image;
-		driver.LoadFileOnSDCard();
-		if(!driver.ResultCode){// если данные получены
-		}else error = 11;
-	};
-	// перезагружаем кассу
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.RebootKKT();
-		if(!driver.ResultCode){// если данные получены
-		}else error = 12;
-	};
-	// дожидаемся связи с ккм
-	if(!error){// если нету ошибок
-		driver.Password = password;
-		driver.ConnectionTimeout = timeout;
-		// ожидаем доступность порта
-		driver.WaitConnection();
-		for(var i = 0, iLen = 5; driver.ResultCode && i < iLen; i++){
-			driver.WaitConnection();
-			wsh.sleep(timeout);
-		};
-		// перебираем скорость порта
-		for(var i = 0, iLen = 7; driver.ResultCode && i < iLen; i++){
-			driver.BaudRate = i;
-			driver.WaitConnection();
-		};
-		if(!driver.ResultCode){// если данные получены
-		}else error = 13;
-	};
-	// проверяем режим работы
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.GetECRStatus();
-		if(!driver.ResultCode){// если запрос выполнен
-			value = driver.ECRMode;
-			if(9 == value){// если режим обнуления
-			}else error = 14;
-		}else error = 14;
-	};
-	// выполняем технологическое обнуление
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.ResetSettings();
-		if(!driver.ResultCode){// если запрос выполнен
-		}else error = 15;
-	};
-	// устанавливаем время с компьютера
-	if(!error){// если нету ошибок
-		now = new Date();
-		value = [// текушее время
-			9 < now.getHours() ? now.getHours() : '0' + now.getHours(),
-			9 < now.getMinutes() ? now.getMinutes() : '0' + now.getMinutes(),
-			9 < now.getSeconds() ? now.getSeconds() : '0' + now.getSeconds()
-		].join(':');
-		driver.Time = value;
-		driver.SetTime();
-		if(!driver.ResultCode){// если запрос выполнен
-		}else error = 16;
-	};
-	// устанавливаем дату с компьютера
-	if(!error){// если нету ошибок
-		value = [// текушее время
-			9 < now.getDate() ? now.getDate() : '0' + now.getDate(),
-			8 < now.getMonth() ? now.getMonth() + 1 : '0' + (now.getMonth() + 1),
-			now.getFullYear()
-		].join('.');
-		driver.Date = value;
-		driver.SetDate();
-		if(!driver.ResultCode){// если запрос выполнен
-			driver.ConfirmDate();
-			if(!driver.ResultCode){// если запрос выполнен
-			}else error = 17;
-		}else error = 17;
-	};
-	// инициализируем таблицу
-	if(!error && !isUpdated){// если нужно выполнить
-		driver.InitTable();
-		if(!driver.ResultCode){// если запрос выполнен
-			isUpdated = true;
-		}else error = 18;
-	};
-	// восстанавливаем значения таблиц
-	if(!error){// если нету ошибок
-		for(var i in table){// таблицы
-			for(var j in table[i]){// ряды
-				for(var k in table[i][j]){// поля
-					value = table[i][j][k];
-					driver.TableNumber = i;
-					driver.RowNumber = j;
-					driver.FieldNumber = k;
-					driver.GetFieldStruct();// запрашиваем структуру
-					if(!driver.ResultCode){// если данные получены
-						if(driver.FieldType) driver.ValueOfFieldString = value;
-						else driver.ValueOfFieldInteger = value;
-						driver.WriteTable();// изменяем данные
-					};
-				};
-			};
-		};
-	};
-	// проверяем и изменяем скорость
-	if(!error){// если нету ошибок
-		driver.GetExchangeParam();
-		if(!driver.ResultCode){// если запрос выполнен
-			value = driver.BaudRate;
-			if(value != speed){// если нужно изменить
-				driver.BaudRate = speed;
-				driver.SetExchangeParam();
-				if(!driver.ResultCode){// если запрос выполнен
-				}else error = 19;
-			};
-		}else error = 19;
-	};
-	// перезагружаем кассу
-	if(!error){// если нету ошибок
-		driver.RebootKKT();
-		if(!driver.ResultCode){// если данные получены
-		}else error = 20;
-	};
-	// завершаем сценарий кодом
-	wsh.quit(error);
+    fso = new ActiveXObject("Scripting.FileSystemObject");
+    // РїРѕР»СѓС‡Р°РµРј РїСѓС‚СЊ Рє С„Р°Р№Р»Сѓ РїСЂРѕС€РёРІРєРё
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        if (0 < wsh.arguments.length) {// РµСЃР»Рё РїРµСЂРµРґР°РЅ РїР°СЂР°РјРµС‚СЂ
+            value = wsh.arguments(0);
+            if (value) {// РµСЃР»Рё Р·Р°РґР°РЅРѕ
+                image = fso.getAbsolutePathName(value);
+            };
+        };
+    };
+    // РїРѕР»СѓС‡Р°РµРј РЅРѕРјРµСЂ СЃР±РѕСЂРєРё РїСЂРѕС€РёРІРєРё
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        if (1 < wsh.arguments.length) {// РµСЃР»Рё РїРµСЂРµРґР°РЅ РїР°СЂР°РјРµС‚СЂ
+            value = wsh.arguments(1);
+            if (value) {// РµСЃР»Рё Р·Р°РґР°РЅРѕ
+                build = value;
+            };
+        };
+    };
+    // РїРѕР»СѓС‡Р°РµРј РЅР°Р·РІР°РЅРёРµ РјРѕРґРµР»Рё РєР°СЃСЃС‹
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        if (2 < wsh.arguments.length) {// РµСЃР»Рё РїРµСЂРµРґР°РЅ РїР°СЂР°РјРµС‚СЂ
+            value = wsh.arguments(2);
+            if (value) {// РµСЃР»Рё Р·Р°РґР°РЅРѕ
+                model = value.toLowerCase();
+            };
+        };
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РµРµ С„Р°Р№Р»Р° РїСЂРѕС€РёРІРєРё
+    if (!error && image) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        if (fso.fileExists(image)) {// РµСЃР»Рё С„Р°Р№Р» СЃСѓС‰РµСЃС‚РІСѓРµС‚
+        } else error = 1;
+    };
+    // СЃРѕР·РґР°С‘Рј РѕР±СЉРµРєС‚ РґР»СЏ РІР·Р°РёРјРѕРґРµР№СЃРёРІРёСЏ СЃ РєР°СЃСЃРѕР№
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        try {// РїСЂРѕР±СѓРµРј РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ Рє РєР°СЃСЃРµ
+            driver = new ActiveXObject("Addin.DrvFR");
+            speed = driver.BaudRate;
+            driver.Password = password;
+            driver.GetECRStatus();
+            if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            } else error = 2;
+        } catch (e) { error = 2; };
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј РІРµСЂСЃРёСЋ РїСЂРѕС€РёРІРєРё
+    if (!error && build) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        value = driver.ECRBuild;
+        if (build != value) {// РµСЃР»Рё РґСЂСѓРіР°СЏ РїСЂРѕС€РёРІРєР°
+        } else error = 3;
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј РЅР°Р·РІР°РЅРёРµ РјРѕРґРµР»Рё РєР°СЃСЃС‹
+    if (!error && model) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        value = driver.UDescription.toLowerCase();
+        if (~value.indexOf(model)) {// РµСЃР»Рё РјРѕРґРµР»СЊ РїРѕРґС…РѕРґРёС‚
+        } else error = 4;
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј СЃРѕСЃС‚РѕСЏРЅРёРµ СЃРјРµРЅС‹
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        if (4 == driver.ECRMode) {// РµСЃР»Рё СЃРјРµРЅР° Р·Р°РєСЂС‹С‚Р°
+        } else error = 5;
+    };
+    // СЃРѕС…СЂР°РЅСЏРµРј РІСЃРµ Р·РЅР°С‡РµРЅРёСЏ С‚Р°Р±Р»РёС†С‹
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        table = {};// СЃР±СЂР°СЃС‹РІР°РµРј Р·РЅР°С‡РµРЅРёСЏ С‚Р°Р±Р»РёС†С‹
+        // СЂР°Р±РѕС‚Р°РµРј СЃ РЅРѕРјРµСЂРѕРј С‚Р°Р±Р»РёС†С‹
+        for (var i = 1; !driver.ResultCode; i++) {
+            driver.TableNumber = i;
+            driver.GetTableStruct();
+            // СЂР°Р±РѕС‚Р°РµРј СЃ СЂСЏРґР°РјРё Рё РїРѕР»СЏРјРё РІ РЅРёС…
+            table[i] = {};// СЃР±СЂР°СЃС‹РІР°РµРј С‚Р°Р±Р»РёС†Сѓ
+            for (var j = 1, jLen = driver.RowNumber; !driver.ResultCode && j <= jLen; j++) {
+                table[i][j] = {};// СЃР±СЂР°СЃС‹РІР°РµРј СЂСЏРґ
+                for (var k = 1, kLen = driver.FieldNumber; !driver.ResultCode && k <= kLen; k++) {
+                    driver.TableNumber = i;// С‚Р°Р±Р»РёС†Р°
+                    driver.RowNumber = j;// СЂСЏРґ
+                    driver.FieldNumber = k;// РїРѕР»Рµ
+                    driver.GetFieldStruct();
+                    if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+                        driver.ReadTable();// РїРѕР»СѓС‡Р°РµРј РґР°РЅРЅС‹Рµ
+                        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+                            if (!driver.FieldType || 1 != driver.MAXValueOfField) {
+                                if (driver.FieldType) value = driver.ValueOfFieldString;
+                                else value = driver.ValueOfFieldInteger;
+                                table[i][j][k] = value;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+        if (93 == driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 6;
+    };
+    // РѕР±РЅРѕРІР»СЏРµРј РїСЂРѕС€РёРІРєСѓ С‡РµСЂРµР· usb
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.UpdateFirmwareMethod = 0;// DFU
+        driver.FileName = image;
+        driver.UpdateFirmware();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            while (1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
+            if (!driver.UpdateFirmwareStatus) isUpdated = true;
+        };
+    };
+    // РґРѕР¶РёРґР°РµРјСЃСЏ СЃРІСЏР·Рё СЃ РєРєРј
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.Password = password;
+        driver.ConnectionTimeout = timeout;
+        // РѕР¶РёРґР°РµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕСЂС‚Р°
+        driver.WaitConnection();
+        for (var i = 0, iLen = 5; driver.ResultCode && i < iLen; i++) {
+            driver.WaitConnection();
+            wsh.sleep(timeout);
+        };
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 7;
+    };
+    // РѕР±РЅРѕРІР»СЏРµРј РїСЂРѕС€РёРІРєСѓ С‡РµСЂРµР· com
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.UpdateFirmwareMethod = 1;// XMODEM
+        driver.FileName = image;
+        driver.UpdateFirmware();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            while (1 == driver.UpdateFirmwareStatus) wsh.sleep(timeout);
+            if (!driver.UpdateFirmwareStatus) isUpdated = true;
+        } else error = 8;
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј РЅР°Р»РёС‡РµРµ РєР°СЂС‚С‹ РїР°РјСЏС‚Рё
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.TableNumber = 14;// Sdcard status
+        driver.RowNumber = 1;// First
+        driver.FieldNumber = 1;// Status
+        driver.GetFieldStruct();// Р·Р°РїСЂР°С€РёРІР°РµРј СЃС‚СЂСѓРєС‚СѓСЂСѓ
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+            driver.ReadTable();// Р·Р°РїСЂР°С€РёРІР°РµРј РґР°РЅРЅС‹Рµ
+            if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+                if (driver.FieldType) value = driver.ValueOfFieldString;
+                else value = driver.ValueOfFieldInteger;
+                if (0 == value) {// РµСЃР»Рё РЅРµС‚ РїСЂРѕР±Р»РµРј СЃ РєР°СЂС‚РѕР№ РїР°РјСЏС‚Рё
+                } else error = 9;
+            } else error = 9;
+        } else error = 9;
+    };
+    // РѕС‚РєР»СЋС‡Р°РµРј РѕРЅР»Р°Р№РЅ РѕР±РЅРѕРІР»РµРЅРёРµ
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        value = 0;// Р Р°Р±РѕС‚Р°С‚СЊ СЃ СЃРµСЂРІРµСЂРѕРј СЃРєРѕРє
+        driver.TableNumber = 23;// AРґРјРёРЅРёСЃС‚СЂРёСЂРѕРІР°РЅРёРµ
+        driver.RowNumber = 1;// First
+        driver.FieldNumber = 1;// Р Р°Р±РѕС‚Р°С‚СЊ СЃ СЃРµСЂРІРµСЂРѕРј СЃРєРѕРє
+        driver.GetFieldStruct();// Р·Р°РїСЂР°С€РёРІР°РµРј СЃС‚СЂСѓРєС‚СѓСЂСѓ
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+            if (driver.FieldType) driver.ValueOfFieldString = value;
+            else driver.ValueOfFieldInteger = value;
+            driver.WriteTable();// РёР·РјРµРЅСЏРµРј РґР°РЅРЅС‹Рµ
+            if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+            } else error = 10;
+        } else error = 10;
+    };
+    // Р·Р°РіСЂСѓР¶Р°РµРј РїСЂРѕС€РёРІРєСѓ РЅР° РєР°СЂС‚Сѓ РїР°РјСЏС‚СЊ
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.FileType = 1;// РїСЂРѕС€РёРІРєР°
+        driver.FileName = image;
+        driver.LoadFileOnSDCard();
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 11;
+    };
+    // РїРµСЂРµР·Р°РіСЂСѓР¶Р°РµРј РєР°СЃСЃСѓ
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.RebootKKT();
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 12;
+    };
+    // РґРѕР¶РёРґР°РµРјСЃСЏ СЃРІСЏР·Рё СЃ РєРєРј
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        driver.Password = password;
+        driver.ConnectionTimeout = timeout;
+        // РѕР¶РёРґР°РµРј РґРѕСЃС‚СѓРїРЅРѕСЃС‚СЊ РїРѕСЂС‚Р°
+        driver.WaitConnection();
+        for (var i = 0, iLen = 5; driver.ResultCode && i < iLen; i++) {
+            driver.WaitConnection();
+            wsh.sleep(timeout);
+        };
+        // РїРµСЂРµР±РёСЂР°РµРј СЃРєРѕСЂРѕСЃС‚СЊ РїРѕСЂС‚Р°
+        for (var i = 0, iLen = 7; driver.ResultCode && i < iLen; i++) {
+            driver.BaudRate = i;
+            driver.WaitConnection();
+        };
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 13;
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј СЂРµР¶РёРј СЂР°Р±РѕС‚С‹
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.GetECRStatus();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            value = driver.ECRMode;
+            if (9 == value) {// РµСЃР»Рё СЂРµР¶РёРј РѕР±РЅСѓР»РµРЅРёСЏ
+            } else error = 14;
+        } else error = 14;
+    };
+    // РІС‹РїРѕР»РЅСЏРµРј С‚РµС…РЅРѕР»РѕРіРёС‡РµСЃРєРѕРµ РѕР±РЅСѓР»РµРЅРёРµ
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.ResetSettings();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+        } else error = 15;
+    };
+    // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РІСЂРµРјСЏ СЃ РєРѕРјРїСЊСЋС‚РµСЂР°
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        now = new Date();
+        value = [// С‚РµРєСѓС€РµРµ РІСЂРµРјСЏ
+            9 < now.getHours() ? now.getHours() : "0" + now.getHours(),
+            9 < now.getMinutes() ? now.getMinutes() : "0" + now.getMinutes(),
+            9 < now.getSeconds() ? now.getSeconds() : "0" + now.getSeconds()
+        ].join(":");
+        driver.Time = value;
+        driver.SetTime();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+        } else error = 16;
+    };
+    // СѓСЃС‚Р°РЅР°РІР»РёРІР°РµРј РґР°С‚Сѓ СЃ РєРѕРјРїСЊСЋС‚РµСЂР°
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        value = [// С‚РµРєСѓС€РµРµ РІСЂРµРјСЏ
+            9 < now.getDate() ? now.getDate() : "0" + now.getDate(),
+            8 < now.getMonth() ? now.getMonth() + 1 : "0" + (now.getMonth() + 1),
+            now.getFullYear()
+        ].join(".");
+        driver.Date = value;
+        driver.SetDate();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            driver.ConfirmDate();
+            if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            } else error = 17;
+        } else error = 17;
+    };
+    // РёРЅРёС†РёР°Р»РёР·РёСЂСѓРµРј С‚Р°Р±Р»РёС†Сѓ
+    if (!error && !isUpdated) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РІС‹РїРѕР»РЅРёС‚СЊ
+        driver.InitTable();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            isUpdated = true;
+        } else error = 18;
+    };
+    // РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј Р·РЅР°С‡РµРЅРёСЏ С‚Р°Р±Р»РёС†
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        for (var i in table) {// С‚Р°Р±Р»РёС†С‹
+            for (var j in table[i]) {// СЂСЏРґС‹
+                for (var k in table[i][j]) {// РїРѕР»СЏ
+                    value = table[i][j][k];
+                    driver.TableNumber = i;
+                    driver.RowNumber = j;
+                    driver.FieldNumber = k;
+                    driver.GetFieldStruct();// Р·Р°РїСЂР°С€РёРІР°РµРј СЃС‚СЂСѓРєС‚СѓСЂСѓ
+                    if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+                        if (driver.FieldType) driver.ValueOfFieldString = value;
+                        else driver.ValueOfFieldInteger = value;
+                        driver.WriteTable();// РёР·РјРµРЅСЏРµРј РґР°РЅРЅС‹Рµ
+                    };
+                };
+            };
+        };
+    };
+    // РїСЂРѕРІРµСЂСЏРµРј Рё РёР·РјРµРЅСЏРµРј СЃРєРѕСЂРѕСЃС‚СЊ
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        driver.GetExchangeParam();
+        if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+            value = driver.BaudRate;
+            if (value != speed) {// РµСЃР»Рё РЅСѓР¶РЅРѕ РёР·РјРµРЅРёС‚СЊ
+                driver.BaudRate = speed;
+                driver.SetExchangeParam();
+                if (!driver.ResultCode) {// РµСЃР»Рё Р·Р°РїСЂРѕСЃ РІС‹РїРѕР»РЅРµРЅ
+                } else error = 19;
+            };
+        } else error = 19;
+    };
+    // РїРµСЂРµР·Р°РіСЂСѓР¶Р°РµРј РєР°СЃСЃСѓ
+    if (!error) {// РµСЃР»Рё РЅРµС‚Сѓ РѕС€РёР±РѕРє
+        driver.RebootKKT();
+        if (!driver.ResultCode) {// РµСЃР»Рё РґР°РЅРЅС‹Рµ РїРѕР»СѓС‡РµРЅС‹
+        } else error = 20;
+    };
+    // Р·Р°РІРµСЂС€Р°РµРј СЃС†РµРЅР°СЂРёР№ РєРѕРґРѕРј
+    wsh.quit(error);
 })(WSH);
